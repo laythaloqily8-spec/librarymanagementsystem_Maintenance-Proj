@@ -19,60 +19,83 @@ import com.knf.dev.librarymanagementsystem.service.AuthorService;
 @Service
 public class AuthorServiceImpl implements AuthorService {
 
-	private final AuthorRepository authorRepository;
+    private final AuthorRepository authorRepository;
 
-	public AuthorServiceImpl(AuthorRepository authorRepository) {
-		this.authorRepository = authorRepository;
-	}
+    public AuthorServiceImpl(AuthorRepository authorRepository) {
+        this.authorRepository = authorRepository;
+    }
 
-	@Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
-	@Override
-	public List<Author> findAllAuthors() {
-		return authorRepository.findAll();
-	}
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
+    @Override
+    public List<Author> findAllAuthors() {
+        return authorRepository.findAll();
+    }
 
-	@Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
-	@Override
-	public Author findAuthorById(Long id) {
-		return authorRepository.findById(id)
-				.orElseThrow(() -> new NotFoundException(String.format("Author not found with ID %d", id)));
-	}
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
+    @Override
+    public Author findAuthorById(Long id) {
+        return authorRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException(String.format("Author not found with ID %d", id)));
+    }
 
-	@Override
-	public void createAuthor(Author author) {
-		authorRepository.save(author);
-	}
+    @Override
+    public void createAuthor(Author author) {
+        authorRepository.save(author);
+    }
 
-	@Override
-	public void updateAuthor(Author author) {
-		authorRepository.save(author);
-	}
+    @Override
+    public void updateAuthor(Author author) {
+        authorRepository.save(author);
+    }
 
-	@Override
-	public void deleteAuthor(Long id) {
-		var author = authorRepository.findById(id)
-				.orElseThrow(() -> new NotFoundException(String.format("Author not found with ID %d", id)));
+    @Override
+    public void deleteAuthor(Long id) {
+        var author = authorRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException(String.format("Author not found with ID %d", id)));
 
-		authorRepository.deleteById(author.getId());
-	}
+        authorRepository.deleteById(author.getId());
+    }
 
-	@Override
-	public Page<Author> findPaginated(Pageable pageable) {
+    @Override
+    public Page<Author> findPaginated(Pageable pageable) {
 
-		var pageSize = pageable.getPageSize();
-		var currentPage = pageable.getPageNumber();
-		var startItem = currentPage * pageSize;
-		List<Author> list;
+        /*
+         * WHAT WAS WRONG BEFORE: Variable names were unclear - 'currentPage' was actually the page number
+         * (0-indexed), and 'startItem' was the offset into the list.
+         * WHAT WAS CHANGED: Renamed to 'pageNumber' and 'offset' for clarity.
+         * WHY THIS IMPROVES MAINTAINABILITY: Variable names now accurately reflect their purpose,
+         * making the code easier to understand for future developers.
+         */
+        int pageSize = pageable.getPageSize();
+        int pageNumber = pageable.getPageNumber();
+        int offset = pageNumber * pageSize;
 
-		if (findAllAuthors().size() < startItem) {
-			list = Collections.emptyList();
-		} else {
-			var toIndex = Math.min(startItem + pageSize, findAllAuthors().size());
-			list = findAllAuthors().subList(startItem, toIndex);
-		}
+        /*
+         * WHAT WAS WRONG BEFORE: Calling findAllAuthors() multiple times (4 times in this method),
+         * causing redundant database queries and performance issues.
+         * WHAT WAS CHANGED: Retrieve the list once and reuse it via 'allAuthors' variable.
+         * WHY THIS IMPROVES MAINTAINABILITY: Reduces database calls, improves performance,
+         * and makes the code more efficient and easier to follow.
+         */
+        List<Author> allAuthors = findAllAuthors();
+        int totalAuthorCount = allAuthors.size();
 
-		return new PageImpl<Author>(list, PageRequest.of(currentPage, pageSize), findAllAuthors().size());
+        List<Author> authorPageContent;
 
-	}
+        /*
+         * WHAT WAS WRONG BEFORE: Using unclear variable name 'list' for the paginated content.
+         * WHAT WAS CHANGED: Renamed to 'authorPageContent' for clarity.
+         * WHY THIS IMPROVES MAINTAINABILITY: Name now clearly indicates the purpose of the variable.
+         */
+        if (totalAuthorCount < offset) {
+            authorPageContent = Collections.emptyList();
+        } else {
+            int endIndex = Math.min(offset + pageSize, totalAuthorCount);
+            authorPageContent = allAuthors.subList(offset, endIndex);
+        }
+
+        return new PageImpl<>(authorPageContent, PageRequest.of(pageNumber, pageSize), totalAuthorCount);
+
+    }
 
 }

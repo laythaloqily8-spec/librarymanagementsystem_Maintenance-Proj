@@ -10,7 +10,7 @@ import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.knf.dev.librarymanagementsystem.entity.Author;
@@ -19,78 +19,115 @@ import com.knf.dev.librarymanagementsystem.service.AuthorService;
 @Controller
 public class AuthorController {
 
-	private final AuthorService authorService;
+    private static final int DEFAULT_PAGE_NUMBER = 1;
+    private static final int DEFAULT_PAGE_SIZE = 5;
 
-	public AuthorController(AuthorService authorService) {
-		this.authorService = authorService;
-	}
+    private final AuthorService authorService;
 
-	@RequestMapping("/authors")
-	public String findAllAuthors(Model model, @RequestParam("page") Optional<Integer> page,
-			@RequestParam("size") Optional<Integer> size) {
+    public AuthorController(AuthorService authorService) {
+        this.authorService = authorService;
+    }
 
-		var currentPage = page.orElse(1);
-		var pageSize = size.orElse(5);
-		var bookPage = authorService.findPaginated(PageRequest.of(currentPage - 1, pageSize));
+    /*
+     * WHAT WAS WRONG BEFORE: Using generic @RequestMapping annotation which is less specific
+     * and doesn't convey the HTTP method intent clearly.
+     * WHAT WAS CHANGED: Replaced @RequestMapping with @GetMapping for better clarity and specificity.
+     * WHY THE CHANGE IMPROVES MAINTAINABILITY: HTTP method is now explicit in the annotation,
+     * making the code self-documenting and allowing proper HTTP method matching.
+     */
+    @GetMapping("/authors")
+    public String findAllAuthors(Model model, @RequestParam("page") Optional<Integer> page,
+            @RequestParam("size") Optional<Integer> size) {
 
-		model.addAttribute("authors", bookPage);
+        int requestedPageNumber = page.orElse(DEFAULT_PAGE_NUMBER);
+        int requestedPageSize = size.orElse(DEFAULT_PAGE_SIZE);
+        var authorPage = authorService.findPaginated(PageRequest.of(requestedPageNumber - 1, requestedPageSize));
 
-		int totalPages = bookPage.getTotalPages();
-		if (totalPages > 0) {
-			var pageNumbers = IntStream.rangeClosed(1, totalPages).boxed().collect(Collectors.toList());
-			model.addAttribute("pageNumbers", pageNumbers);
-		}
-		return "list-authors";
-	}
+        model.addAttribute("authors", authorPage);
 
-	@RequestMapping("/author/{id}")
-	public String findAuthorById(@PathVariable("id") Long id, Model model) {
+        int totalPageCount = authorPage.getTotalPages();
+        if (totalPageCount > 0) {
+            var pageNumbers = generatePageNumbers(totalPageCount);
+            model.addAttribute("pageNumbers", pageNumbers);
+        }
+        return "list-authors";
+    }
 
-		model.addAttribute("author", authorService.findAuthorById(id));
-		return "list-author";
-	}
+    /*
+     * WHAT WAS WRONG BEFORE: Pagination page number generation logic was embedded directly in the method.
+     * WHAT WAS CHANGED: Extracted into a private helper method called generatePageNumbers.
+     * WHY THE CHANGE IMPROVES MAINTAINABILITY: Logic is now reusable, testable in isolation,
+     * and the main method is cleaner and focused on its primary responsibility.
+     */
+    private java.util.List<Integer> generatePageNumbers(int totalPages) {
+        return IntStream.rangeClosed(1, totalPages).boxed().collect(Collectors.toList());
+    }
 
-	@GetMapping("/addAuthor")
-	public String showCreateForm(Author author) {
-		return "add-author";
-	}
+    /*
+     * WHAT WAS WRONG BEFORE: Using generic @RequestMapping annotation.
+     * WHAT WAS CHANGED: Replaced with @GetMapping since this is a read operation.
+     * WHY THE CHANGE IMPROVES MAINTAINABILITY: HTTP method is now explicit.
+     */
+    @GetMapping("/author/{id}")
+    public String findAuthorById(@PathVariable("id") Long id, Model model) {
 
-	@RequestMapping("/add-author")
-	public String createAuthor(Author author, BindingResult result, Model model) {
-		if (result.hasErrors()) {
-			return "add-author";
-		}
+        model.addAttribute("author", authorService.findAuthorById(id));
+        return "list-author";
+    }
 
-		authorService.createAuthor(author);
-		model.addAttribute("author", authorService.findAllAuthors());
-		return "redirect:/authors";
-	}
+    @GetMapping("/addAuthor")
+    public String showCreateForm(Author author) {
+        return "add-author";
+    }
 
-	@GetMapping("/updateAuthor/{id}")
-	public String showUpdateForm(@PathVariable("id") Long id, Model model) {
+    /*
+     * WHAT WAS WRONG BEFORE: Using generic @RequestMapping; unnecessary model.addAttribute before redirect.
+     * WHAT WAS CHANGED: Replaced with @PostMapping; removed model.addAttribute call before redirect.
+     * WHY THE CHANGE IMPROVES MAINTAINABILITY: HTTP method explicit; model attributes are ignored on redirect
+     * so this was dead code that could confuse developers.
+     */
+    @PostMapping("/add-author")
+    public String createAuthor(Author author, BindingResult result, Model model) {
+        if (result.hasErrors()) {
+            return "add-author";
+        }
 
-		model.addAttribute("author", authorService.findAuthorById(id));
-		return "update-author";
-	}
+        authorService.createAuthor(author);
+        return "redirect:/authors";
+    }
 
-	@RequestMapping("/update-author/{id}")
-	public String updateAuthor(@PathVariable("id") Long id, Author author, BindingResult result, Model model) {
-		if (result.hasErrors()) {
-			author.setId(id);
-			return "update-author";
-		}
+    @GetMapping("/updateAuthor/{id}")
+    public String showUpdateForm(@PathVariable("id") Long id, Model model) {
 
-		authorService.updateAuthor(author);
-		model.addAttribute("author", authorService.findAllAuthors());
-		return "redirect:/authors";
-	}
+        model.addAttribute("author", authorService.findAuthorById(id));
+        return "update-author";
+    }
 
-	@RequestMapping("/remove-author/{id}")
-	public String deleteAuthor(@PathVariable("id") Long id, Model model) {
-		authorService.deleteAuthor(id);
+    /*
+     * WHAT WAS WRONG BEFORE: Using generic @RequestMapping; unnecessary model.addAttribute before redirect.
+     * WHAT WAS CHANGED: Replaced with @PostMapping; removed model.addAttribute call before redirect.
+     * WHY THE CHANGE IMPROVES MAINTAINABILITY: HTTP method explicit; removed dead code.
+     */
+    @PostMapping("/update-author/{id}")
+    public String updateAuthor(@PathVariable("id") Long id, Author author, BindingResult result, Model model) {
+        if (result.hasErrors()) {
+            author.setId(id);
+            return "update-author";
+        }
 
-		model.addAttribute("author", authorService.findAllAuthors());
-		return "redirect:/authors";
-	}
+        authorService.updateAuthor(author);
+        return "redirect:/authors";
+    }
+
+    /*
+     * WHAT WAS WRONG BEFORE: Using generic @RequestMapping; unnecessary model.addAttribute before redirect.
+     * WHAT WAS CHANGED: Replaced with @GetMapping (or could be @PostMapping); removed model.addAttribute call.
+     * WHY THE CHANGE IMPROVES MAINTAINABILITY: HTTP method explicit; removed dead code.
+     */
+    @GetMapping("/remove-author/{id}")
+    public String deleteAuthor(@PathVariable("id") Long id, Model model) {
+        authorService.deleteAuthor(id);
+        return "redirect:/authors";
+    }
 
 }
